@@ -1,4 +1,4 @@
-let handler = async (m, { command, text }) => {
+let handler = async (m, { usedPrefix, command, text }) => {
     if (!text) throw `Teksnya mana?\n\nContoh:\n${usedPrefix + command} Hi @user\n\n@user = User Tag\n@subject = Nama Group\n@desc = Deskripsi Group`
     let chat = global.db.data.chats[m.chat]
 
@@ -22,7 +22,7 @@ let handler = async (m, { command, text }) => {
     }
 }
 
-handler.help = ['welcome', 'bye', 'promote', 'demote'].map(v => 'set' + v ' <teks>')
+handler.help = ['welcome', 'bye', 'promote', 'demote'].map(v => 'set' + v + ' <teks>')
 handler.tags = ['group']
 handler.command = /^(setwelcome|setbye|setpromote|setdemote)$/i
 handler.group = true

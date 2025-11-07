@@ -1,3 +1,5 @@
+import { canLevelUp, xpRange } from '../lib/levelling.js';
+
 let handler = m => m
 
 handler.before = function(m) {
@@ -71,7 +73,7 @@ handler.before = function(m) {
     user.role = role
 
     if (user.autolevelup && before !== user.level) {
-        await m.reply(`Selamat, Kamu Telah Naik Level!\n\n• Level Up : *${before}* -> *${user.level}*`)
+        m.reply(`Selamat, Kamu Telah Naik Level!\n\n• Level Up : *${before}* -> *${user.level}*`)
     }
 
     return true

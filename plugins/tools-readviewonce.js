@@ -1,7 +1,6 @@
 let handler = async (m) => {
-
     if (!m.quoted) return m.reply("Reply gambar/video yang ingin Anda lihat");
-    if (m.quoted.mediaMessage[m.quoted.mediaType].viewOnce) {
+    if (m.quoted.mediaMessage[m.quoted?.mediaType]?.viewOnce) {
         let msg = await m.getQuotedObj()?.message;
         let type = Object.keys(msg)[0];
         let media = await m.quoted?.download() || await m.getQuotedObj().download();

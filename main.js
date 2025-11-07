@@ -9,16 +9,17 @@ global.__filename = function filename(pathURL = import.meta.url, rmPrefix = plat
 
 import fs from 'fs';
 import { spawn } from 'child_process';
-import syntaxerror from 'syntax-error';
 import { tmpdir } from 'os';
-import pino from 'pino';
 import { format } from 'util';
 import { makeWASocket, protoType, serialize } from './lib/simple.js';
-import { Low, JSONFile } from 'lowdb';
+import { Boom } from '@hapi/boom';
 import chalk from 'chalk';
+import pino from 'pino';
+import syntaxerror from 'syntax-error';
+import { Low, JSONFile } from 'lowdb';
+
 import {
   useMultiFileAuthState,
-  DisconnectReason,
   Browsers,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore
@@ -126,8 +127,9 @@ async function connectionUpdate(update) {
     console.log(chalk.red('⏱️ Koneksi terputus & mencoba menyambung ulang...'));
   }
 
-  if (lastDisconnect && lastDisconnect.error && lastDisconnect.error.output && lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut) {
-    console.log(await global.reloadHandler(true));
+  if (lastDisconnect && lastDisconnect.error && lastDisconnect.error.output && lastDisconnect.error.output.payload) {
+    console.log(chalk.red(lastDisconnect.error.output.payload.message))
+    await global.reloadHandler(true);
   }
 
   if (global.db.data == null) {
