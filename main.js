@@ -67,13 +67,16 @@ const connectionOptions = ({
         )
     },
     version,
-    logger: pino({
-        level: 'silent'
-    }),
+    logger: pino({ level: 'silent' }),
     browser: Browsers.ubuntu('Edge'),
     generateHighQualityLinkPreview: true,
-    syncFullHistory: true,
-    markOnlineOnConnect: true
+    syncFullHistory: false,
+    shouldSyncHistoryMessage: () => true,
+    markOnlineOnConnect: true,
+    connectTimeoutMs: 60_000,
+	keepAliveIntervalMs: 30_000,
+	retryRequestDelayMs: 250,
+	maxMsgRetryCount: 5
 })
 
 global.conn = makeWASocket(connectionOptions)

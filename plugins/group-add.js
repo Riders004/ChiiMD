@@ -1,5 +1,5 @@
-let handler = async (m, { args, text }) => {
-    const user = m.quoted ? m.quoted.sender : m.mentionedJid && m.mentionedJid[0] ? m.mentionedJid[0] : m.text ? m.text.replace(/[^0-9]/g, '') + '@s.whatsapp.net' : '';
+let handler = async (m, { args, text, groupMetadata }) => {
+    const user = m.quoted ? m.quoted.sender : m.mentionedJid && m.mentionedJid[0] ? m.mentionedJid[0] : text ? text.replace(/[^0-9]/g, '') + '@s.whatsapp.net' : '';
     if (!user) return m.reply('Reply/Tag/Tulis nomor yang ingin diadd');
     const response = await conn.groupParticipantsUpdate(m.chat, [user], 'add');
     const jpegThumbnail = await conn.profilePictureUrl(m.chat, 'image')
@@ -20,7 +20,7 @@ let handler = async (m, { args, text }) => {
                 jid,
                 inviteCode,
                 inviteExp,
-                conn.chats[m.chat].subject,
+                groupMetadata.subject,
                 'Undangan untuk bergabung ke grup WhatsApp saya',
                 jpegThumbnail
             );
