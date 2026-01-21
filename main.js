@@ -38,6 +38,7 @@ global.prefix = new RegExp('^[' + '‎xzXZ/i!#$%+£¢€¥^°=¶∆×÷π√✓�
 global.db = {
 	sqlite: null,
 	data: null,
+	dirty: false,
 };
 
 global.loadDatabase = function () {
@@ -123,8 +124,12 @@ if (!conn.authState.creds.registered) {
 
 if (global.db) {
 	setInterval(() => {
-		if (global.db.data) {
+		// ⚡ Bolt: This optimization prevents unnecessary database writes.
+		// The 'dirty' flag is set to true only when the database is modified.
+		// This ensures we only write to disk when there are actual changes.
+		if (global.db.dirty) {
 			global.db.sqlite.prepare('UPDATE database SET data = ? WHERE id = 1').run(JSON.stringify(global.db.data));
+			global.db.dirty = false;
 		}
 
 		if ((global.support || {}).find) {
