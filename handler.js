@@ -255,6 +255,9 @@ export async function handler(chatUpdate) {
 	} catch (e) {
 		console.error(e);
 	} finally {
+		// ⚡ Bolt: Mark the database as dirty whenever a message is processed.
+		// This ensures that any changes made during message handling are saved.
+		if (m) global.db.dirty = true;
 		let user,
 			stats = global.db.data.stats;
 
