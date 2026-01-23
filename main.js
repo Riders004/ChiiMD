@@ -23,6 +23,7 @@ import { makeWASocket, protoType, serialize } from './lib/simple.js';
 import chalk from 'chalk';
 import pino from 'pino';
 import syntaxerror from 'syntax-error';
+import { createRecursiveProxy } from './lib/proxy.js';
 import Database from 'better-sqlite3';
 
 import useSQLiteAuthState from './lib/useSQLite.js';
@@ -38,6 +39,7 @@ global.prefix = new RegExp('^[' + '‎xzXZ/i!#$%+£¢€¥^°=¶∆×÷π√✓�
 global.db = {
 	sqlite: null,
 	data: null,
+	dirty: false,
 };
 
 global.loadDatabase = function () {
@@ -60,7 +62,7 @@ global.loadDatabase = function () {
 
 	if (global.db.data !== null) return;
 
-	global.db.data = {
+	const initialData = {
 		users: {},
 		chats: {},
 		stats: {},
@@ -73,13 +75,18 @@ global.loadDatabase = function () {
 
 	if (row?.data) {
 		try {
-			Object.assign(global.db.data, JSON.parse(row.data));
+			Object.assign(initialData, JSON.parse(row.data));
 		} catch {
 			console.error('[DB] JSON rusak, reset database');
 		}
 	} else {
-		global.db.sqlite.prepare('INSERT OR IGNORE INTO database (id, data) VALUES (1, ?)').run(JSON.stringify(global.db.data));
+		global.db.sqlite.prepare('INSERT OR IGNORE INTO database (id, data) VALUES (1, ?)').run(JSON.stringify(initialData));
 	}
+	// ⚡ Bolt: Wrap the database object in a recursive Proxy to automatically
+	// detect changes and mark the database as "dirty." This prevents
+	// unnecessary writes to disk.
+	global.db.data = createRecursiveProxy(initialData, () => (global.db.dirty = true));
+	global.db.dirty = false;
 };
 loadDatabase();
 
@@ -122,9 +129,12 @@ if (!conn.authState.creds.registered) {
 }
 
 if (global.db) {
+	// ⚡ Bolt: Save the database to disk only when it has been modified.
+	// This reduces unnecessary I/O operations and improves performance.
 	setInterval(() => {
-		if (global.db.data) {
+		if (global.db.dirty) {
 			global.db.sqlite.prepare('UPDATE database SET data = ? WHERE id = 1').run(JSON.stringify(global.db.data));
+			global.db.dirty = false;
 		}
 
 		if ((global.support || {}).find) {

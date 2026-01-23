@@ -4,3 +4,6 @@ sessions
 *.zip
 database.json
 push.sh
+data/
+npm_output.log
+*.log
