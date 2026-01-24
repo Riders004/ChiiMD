@@ -38,6 +38,7 @@ global.prefix = new RegExp('^[' + '‎xzXZ/i!#$%+£¢€¥^°=¶∆×÷π√✓�
 global.db = {
 	sqlite: null,
 	data: null,
+	dirty: false,
 };
 
 global.loadDatabase = function () {
@@ -80,6 +81,30 @@ global.loadDatabase = function () {
 	} else {
 		global.db.sqlite.prepare('INSERT OR IGNORE INTO database (id, data) VALUES (1, ?)').run(JSON.stringify(global.db.data));
 	}
+
+	// ⚡ Bolt: This is a recursive Proxy handler that automatically detects
+	// changes to the global.db.data object and its nested properties.
+	// When any property is set or deleted, it sets a "dirty" flag to true,
+	// indicating that the database has been modified.
+	const handler = {
+		get(target, prop, receiver) {
+			const value = Reflect.get(target, prop, receiver);
+			if (typeof value === 'object' && value !== null) {
+				return new Proxy(value, handler);
+			}
+			return value;
+		},
+		set(target, prop, value, receiver) {
+			global.db.dirty = true;
+			return Reflect.set(target, prop, value, receiver);
+		},
+		deleteProperty(target, prop) {
+			global.db.dirty = true;
+			return Reflect.deleteProperty(target, prop);
+		},
+	};
+
+	global.db.data = new Proxy(global.db.data, handler);
 };
 loadDatabase();
 
@@ -122,9 +147,13 @@ if (!conn.authState.creds.registered) {
 }
 
 if (global.db) {
+	// ⚡ Bolt: To prevent unnecessary disk writes, we now only save the database
+	// when the `global.db.dirty` flag is true. The flag is reset to false
+	// after a successful write.
 	setInterval(() => {
-		if (global.db.data) {
+		if (global.db.dirty) {
 			global.db.sqlite.prepare('UPDATE database SET data = ? WHERE id = 1').run(JSON.stringify(global.db.data));
+			global.db.dirty = false;
 		}
 
 		if ((global.support || {}).find) {
