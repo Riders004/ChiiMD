@@ -38,7 +38,49 @@ global.prefix = new RegExp('^[' + '‎xzXZ/i!#$%+£¢€¥^°=¶∆×÷π√✓�
 global.db = {
 	sqlite: null,
 	data: null,
+	dirty: false,
 };
+
+/**
+ * Creates a recursive Proxy to track changes in an object.
+ * @param {object} target The object to wrap.
+ * @param {Function} onDirty Callback to trigger when a value is changed.
+ * @param {WeakMap} proxiedObjects A map to keep track of objects that have already been proxied.
+ * @returns {Proxy}
+ */
+function createRecursiveProxy(target, onDirty, proxiedObjects = new WeakMap()) {
+	if (proxiedObjects.has(target)) {
+		return proxiedObjects.get(target);
+	}
+
+	const handler = {
+		set(obj, prop, value) {
+			if (obj[prop] !== value) {
+				onDirty();
+			}
+			obj[prop] = value;
+			return true;
+		},
+		deleteProperty(obj, prop) {
+			if (prop in obj) {
+				onDirty();
+				delete obj[prop];
+			}
+			return true;
+		},
+		get(obj, prop) {
+			const item = obj[prop];
+			if (item && typeof item === 'object') {
+				return createRecursiveProxy(item, onDirty, proxiedObjects);
+			}
+			return item;
+		},
+	};
+
+	const proxy = new Proxy(target, handler);
+	proxiedObjects.set(target, proxy);
+	return proxy;
+}
 
 global.loadDatabase = function () {
 	if (!global.db.sqlite) {
@@ -73,13 +115,16 @@ global.loadDatabase = function () {
 
 	if (row?.data) {
 		try {
-			Object.assign(global.db.data, JSON.parse(row.data));
+			const parsedData = JSON.parse(row.data);
+			Object.assign(global.db.data, parsedData);
 		} catch {
 			console.error('[DB] JSON rusak, reset database');
 		}
 	} else {
 		global.db.sqlite.prepare('INSERT OR IGNORE INTO database (id, data) VALUES (1, ?)').run(JSON.stringify(global.db.data));
 	}
+
+	global.db.data = createRecursiveProxy(global.db.data, () => (global.db.dirty = true));
 };
 loadDatabase();
 
@@ -123,8 +168,9 @@ if (!conn.authState.creds.registered) {
 
 if (global.db) {
 	setInterval(() => {
-		if (global.db.data) {
+		if (global.db.data && global.db.dirty) {
 			global.db.sqlite.prepare('UPDATE database SET data = ? WHERE id = 1').run(JSON.stringify(global.db.data));
+			global.db.dirty = false;
 		}
 
 		if ((global.support || {}).find) {
