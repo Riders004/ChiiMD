@@ -80,6 +80,14 @@ global.loadDatabase = function () {
 	} else {
 		global.db.sqlite.prepare('INSERT OR IGNORE INTO database (id, data) VALUES (1, ?)').run(JSON.stringify(global.db.data));
 	}
+
+	// ⚡ Bolt: Wrap the database object in a recursive proxy to track changes.
+	// This avoids unnecessary writes by setting a "dirty" flag only when data is modified.
+	const { watch } = require('./lib/proxy');
+	global.db.dirty = false;
+	global.db.data = watch(global.db.data, () => {
+		global.db.dirty = true;
+	});
 };
 loadDatabase();
 
@@ -123,8 +131,12 @@ if (!conn.authState.creds.registered) {
 
 if (global.db) {
 	setInterval(() => {
-		if (global.db.data) {
+		// ⚡ Bolt: Only write to the database if the "dirty" flag is set.
+		// This prevents unnecessary writes when the data hasn't changed.
+		if (global.db.dirty) {
 			global.db.sqlite.prepare('UPDATE database SET data = ? WHERE id = 1').run(JSON.stringify(global.db.data));
+			global.db.dirty = false;
+			console.log('[DB] Saved database due to changes.');
 		}
 
 		if ((global.support || {}).find) {
