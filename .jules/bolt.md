@@ -1,0 +1,5 @@
+## 2024-05-20 - Inefficient Database Persistence
+
+**Learning:** The application's core logic in `main.js` uses a `setInterval` to write the entire in-memory database (`global.db.data`) to a SQLite file every five seconds. This is highly inefficient as it performs a write operation regardless of whether the data has actually changed, leading to unnecessary I/O and CPU usage. The synchronous `JSON.stringify` operation on a potentially large object can also introduce blocking on the main thread.
+
+**Action:** I will replace this polling mechanism with a "dirty flag" system. By wrapping `global.db.data` in a recursive Proxy, I can intercept all mutations, set a `global.db.dirty` flag to `true` upon any change, and have the `setInterval` only write to disk when this flag is `true`. This will ensure that database writes only occur when absolutely necessary.
