@@ -60,7 +60,44 @@ global.loadDatabase = function () {
 
 	if (global.db.data !== null) return;
 
-	global.db.data = {
+	global.db.dirty = false;
+	const proxiedObjects = new WeakMap();
+
+	/**
+	 * Creates a recursive proxy that tracks changes to nested objects.
+	 * @param {object} target The object to proxy.
+	 * @returns {Proxy} The proxied object.
+	 */
+	function createRecursiveProxy(target) {
+		if (typeof target !== 'object' || target === null) {
+			return target;
+		}
+
+		if (proxiedObjects.has(target)) {
+			return proxiedObjects.get(target);
+		}
+
+		const proxy = new Proxy(target, {
+			get(target, prop, receiver) {
+				const value = Reflect.get(target, prop, receiver);
+				// Recursively proxy nested objects on access.
+				return createRecursiveProxy(value);
+			},
+			set(target, prop, value, receiver) {
+				global.db.dirty = true;
+				return Reflect.set(target, prop, value, receiver);
+			},
+			deleteProperty(target, prop) {
+				global.db.dirty = true;
+				return Reflect.deleteProperty(target, prop);
+			},
+		});
+
+		proxiedObjects.set(target, proxy);
+		return proxy;
+	}
+
+	let initialData = {
 		users: {},
 		chats: {},
 		stats: {},
@@ -73,13 +110,14 @@ global.loadDatabase = function () {
 
 	if (row?.data) {
 		try {
-			Object.assign(global.db.data, JSON.parse(row.data));
+			Object.assign(initialData, JSON.parse(row.data));
 		} catch {
 			console.error('[DB] JSON rusak, reset database');
 		}
 	} else {
-		global.db.sqlite.prepare('INSERT OR IGNORE INTO database (id, data) VALUES (1, ?)').run(JSON.stringify(global.db.data));
+		global.db.sqlite.prepare('INSERT OR IGNORE INTO database (id, data) VALUES (1, ?)').run(JSON.stringify(initialData));
 	}
+	global.db.data = createRecursiveProxy(initialData);
 };
 loadDatabase();
 
@@ -123,8 +161,9 @@ if (!conn.authState.creds.registered) {
 
 if (global.db) {
 	setInterval(() => {
-		if (global.db.data) {
+		if (global.db.dirty) {
 			global.db.sqlite.prepare('UPDATE database SET data = ? WHERE id = 1').run(JSON.stringify(global.db.data));
+			global.db.dirty = false;
 		}
 
 		if ((global.support || {}).find) {
