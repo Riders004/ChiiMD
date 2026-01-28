@@ -34,10 +34,45 @@ serialize();
 
 const __dirname = global.__dirname(import.meta.url);
 
+// ⚡ Bolt: Add a recursive Proxy to track database changes and set a dirty flag.
+// This avoids unnecessary database writes by only saving when data has actually changed.
+const proxied = new WeakMap();
+function createProxy(target) {
+	if (typeof target !== 'object' || target === null) {
+		return target;
+	}
+
+	if (proxied.has(target)) {
+		return proxied.get(target);
+	}
+
+	const proxy = new Proxy(target, {
+		get(target, prop, receiver) {
+			const value = Reflect.get(target, prop, receiver);
+			// Recursively create a proxy for nested objects.
+			return createProxy(value);
+		},
+		set(target, prop, value, receiver) {
+			// Set the dirty flag before changing the value.
+			global.db.dirty = true;
+			return Reflect.set(target, prop, value, receiver);
+		},
+		deleteProperty(target, prop) {
+			// Set the dirty flag before deleting a property.
+			global.db.dirty = true;
+			return Reflect.deleteProperty(target, prop);
+		},
+	});
+
+	proxied.set(target, proxy);
+	return proxy;
+}
+
 global.prefix = new RegExp('^[' + '‎xzXZ/i!#$%+£¢€¥^°=¶∆×÷π√✓©®:;?&.\\-'.replace(/[|\\{}[\]()^$+*?.-]/g, '\\$&') + ']');
 global.db = {
 	sqlite: null,
 	data: null,
+	dirty: false, // ⚡ Bolt: Add a dirty flag to track database changes.
 };
 
 global.loadDatabase = function () {
@@ -80,6 +115,10 @@ global.loadDatabase = function () {
 	} else {
 		global.db.sqlite.prepare('INSERT OR IGNORE INTO database (id, data) VALUES (1, ?)').run(JSON.stringify(global.db.data));
 	}
+
+	// ⚡ Bolt: Wrap the database object in a Proxy to track changes.
+	global.db.data = createProxy(global.db.data);
+	global.db.dirty = false;
 };
 loadDatabase();
 
@@ -121,10 +160,14 @@ if (!conn.authState.creds.registered) {
 	}
 }
 
+// ⚡ Bolt: Save the database to disk only when the `dirty` flag is set.
+// This prevents unnecessary writes and improves performance by avoiding I/O operations when the database hasn't changed.
 if (global.db) {
 	setInterval(() => {
-		if (global.db.data) {
+		if (global.db.dirty) {
 			global.db.sqlite.prepare('UPDATE database SET data = ? WHERE id = 1').run(JSON.stringify(global.db.data));
+			global.db.dirty = false;
+			console.log(chalk.green('✅ Database saved'));
 		}
 
 		if ((global.support || {}).find) {
