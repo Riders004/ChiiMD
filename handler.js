@@ -1,4 +1,5 @@
 import db from './lib/database.js';
+import print from './lib/print.js';
 import { smsg } from './lib/simple.js';
 import { format } from 'util';
 import { fileURLToPath } from 'url';
@@ -289,7 +290,7 @@ export async function handler(chatUpdate) {
 		}
 
 		try {
-			await (await import(`./lib/print.js`)).default(m, this);
+			await print(m, this);
 		} catch (e) {
 			console.log(m, m.quoted, e);
 		}
