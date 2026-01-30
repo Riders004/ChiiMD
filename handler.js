@@ -1,3 +1,4 @@
+import db from './lib/database.js';
 import { smsg } from './lib/simple.js';
 import { format } from 'util';
 import { fileURLToPath } from 'url';
@@ -21,8 +22,10 @@ export async function handler(chatUpdate) {
 		m.exp = 0;
 		m.limit = false;
 
+		// Performance optimization: Replaced dynamic import with a static import for database handling.
+		// This avoids reloading the module on every message, significantly improving performance.
 		if (m.sender.endsWith('@broadcast') || m.sender.endsWith('@newsletter')) return;
-		await (await import(`./lib/database.js?v=${Date.now()}`)).default(m, this);
+		db(m, this);
 
 		if (typeof m.text !== 'string') m.text = '';
 
