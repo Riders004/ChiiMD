@@ -38,6 +38,7 @@ global.prefix = new RegExp('^[' + '‎xzXZ/i!#$%+£¢€¥^°=¶∆×÷π√✓�
 global.db = {
 	sqlite: null,
 	data: null,
+	dirty: false,
 };
 
 global.loadDatabase = function () {
@@ -80,6 +81,41 @@ global.loadDatabase = function () {
 	} else {
 		global.db.sqlite.prepare('INSERT OR IGNORE INTO database (id, data) VALUES (1, ?)').run(JSON.stringify(global.db.data));
 	}
+
+	// Use a recursive Proxy to detect any data mutations and set a 'dirty' flag.
+	const proxiedData = (() => {
+		const proxyCache = new WeakMap();
+
+		return function createProxy(target) {
+			if (proxyCache.has(target)) {
+				return proxyCache.get(target);
+			}
+
+			const handler = {
+				get(target, prop, receiver) {
+					const value = Reflect.get(target, prop, receiver);
+					if (typeof value === 'object' && value !== null) {
+						return createProxy(value);
+					}
+					return value;
+				},
+				set(target, prop, value) {
+					global.db.dirty = true;
+					return Reflect.set(target, prop, value);
+				},
+				deleteProperty(target, prop) {
+					global.db.dirty = true;
+					return Reflect.deleteProperty(target, prop);
+				},
+			};
+
+			const proxy = new Proxy(target, handler);
+			proxyCache.set(target, proxy);
+			return proxy;
+		};
+	})();
+
+	global.db.data = proxiedData(global.db.data);
 };
 loadDatabase();
 
@@ -123,8 +159,9 @@ if (!conn.authState.creds.registered) {
 
 if (global.db) {
 	setInterval(() => {
-		if (global.db.data) {
+		if (global.db.dirty) {
 			global.db.sqlite.prepare('UPDATE database SET data = ? WHERE id = 1').run(JSON.stringify(global.db.data));
+			global.db.dirty = false;
 		}
 
 		if ((global.support || {}).find) {
