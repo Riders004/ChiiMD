@@ -158,6 +158,10 @@ if (!conn.authState.creds.registered) {
 }
 
 if (global.db) {
+	// ⚡ Bolt: Increased database write interval from 5s to 30s.
+	// This reduces frequent I/O operations, improving overall performance
+	// by minimizing disk writes and process spawning for file cleanup.
+	// The previous 5-second interval was unnecessarily frequent.
 	setInterval(() => {
 		if (global.db.dirty) {
 			global.db.sqlite.prepare('UPDATE database SET data = ? WHERE id = 1').run(JSON.stringify(global.db.data));
@@ -168,7 +172,7 @@ if (global.db) {
 			const tmp = [tmpdir(), 'tmp'];
 			tmp.forEach((filename) => spawn('find', [filename, '-amin', '3', '-type', 'f', '-delete']));
 		}
-	}, 5000);
+	}, 30_000);
 }
 
 async function connectionUpdate(update) {
