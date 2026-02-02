@@ -1,10 +1,14 @@
 import db from './lib/database.js';
 import { smsg } from './lib/simple.js';
+import print from './lib/print.js';
 import { format } from 'util';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { unwatchFile, watchFile } from 'fs';
 import chalk from 'chalk';
+
+const ___dirname = path.join(path.dirname(fileURLToPath(import.meta.url)), './plugins');
+const str2Regex = (str) => str.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&');
 
 /**
  * Handle messages upsert
@@ -50,7 +54,6 @@ export async function handler(chatUpdate) {
 		const isAdmin = isRAdmin || user?.admin == 'admin' || false; // Is User Admin?
 		const isBotAdmin = bot?.admin || false; // Are you Admin?
 
-		const ___dirname = path.join(path.dirname(fileURLToPath(import.meta.url)), './plugins');
 		for (let name in global.plugins) {
 			let plugin = global.plugins[name];
 			if (!plugin) continue;
@@ -76,7 +79,6 @@ export async function handler(chatUpdate) {
 				// global.dfail('restrict', m, this)
 				continue;
 			}
-			const str2Regex = (str) => str.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&');
 			let _prefix = plugin.customPrefix ? plugin.customPrefix : conn.prefix ? conn.prefix : global.prefix;
 			let match = (
 				_prefix instanceof RegExp // RegExp Mode?
@@ -289,7 +291,9 @@ export async function handler(chatUpdate) {
 		}
 
 		try {
-			await (await import(`./lib/print.js`)).default(m, this);
+			// ⚡ Bolt: Replaced dynamic import with static import and moved it to the top level.
+			// This avoids the overhead of import() on every message.
+			await print(m, this);
 		} catch (e) {
 			console.log(m, m.quoted, e);
 		}
