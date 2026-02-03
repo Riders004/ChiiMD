@@ -5,6 +5,11 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import { unwatchFile, watchFile } from 'fs';
 import chalk from 'chalk';
+import print from './lib/print.js';
+
+// ⚡ Bolt: Pre-calculating plugins directory and regex utility to avoid redundant operations on every message.
+const pluginsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), './plugins');
+const str2Regex = (str) => str.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&');
 
 /**
  * Handle messages upsert
@@ -50,17 +55,35 @@ export async function handler(chatUpdate) {
 		const isAdmin = isRAdmin || user?.admin == 'admin' || false; // Is User Admin?
 		const isBotAdmin = bot?.admin || false; // Are you Admin?
 
-		const ___dirname = path.join(path.dirname(fileURLToPath(import.meta.url)), './plugins');
+		const defaultPrefix = this.prefix ? this.prefix : global.prefix;
+		// ⚡ Bolt: Pre-calculate the default prefix match once per message to avoid redundant regex creations
+		// and executions for every plugin. This reduces prefix matching overhead from O(N) to O(1) in the common case.
+		const defaultPrefixMatch = (
+			defaultPrefix instanceof RegExp // RegExp Mode?
+				? [[defaultPrefix.exec(m.text), defaultPrefix]]
+				: Array.isArray(defaultPrefix) // Array?
+					? defaultPrefix.map((p) => {
+							let re =
+								p instanceof RegExp // RegExp in Array?
+									? p
+									: new RegExp(str2Regex(p));
+							return [re.exec(m.text), re];
+						})
+					: typeof defaultPrefix === 'string' // String?
+						? [[new RegExp(str2Regex(defaultPrefix)).exec(m.text), new RegExp(str2Regex(defaultPrefix))]]
+						: [[[], new RegExp()]]
+		).find((p) => p[1]);
+
 		for (let name in global.plugins) {
 			let plugin = global.plugins[name];
 			if (!plugin) continue;
 			if (plugin.disabled) continue;
-			const __filename = path.join(___dirname, name);
+			const __filename = path.join(pluginsDir, name);
 			if (typeof plugin.all === 'function') {
 				try {
 					await plugin.all.call(this, m, {
 						chatUpdate,
-						__dirname: ___dirname,
+						__dirname: pluginsDir,
 						__filename,
 					});
 				} catch (e) {
@@ -76,23 +99,25 @@ export async function handler(chatUpdate) {
 				// global.dfail('restrict', m, this)
 				continue;
 			}
-			const str2Regex = (str) => str.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&');
-			let _prefix = plugin.customPrefix ? plugin.customPrefix : conn.prefix ? conn.prefix : global.prefix;
-			let match = (
-				_prefix instanceof RegExp // RegExp Mode?
-					? [[_prefix.exec(m.text), _prefix]]
-					: Array.isArray(_prefix) // Array?
-						? _prefix.map((p) => {
-								let re =
-									p instanceof RegExp // RegExp in Array?
-										? p
-										: new RegExp(str2Regex(p));
-								return [re.exec(m.text), re];
-							})
-						: typeof _prefix === 'string' // String?
-							? [[new RegExp(str2Regex(_prefix)).exec(m.text), new RegExp(str2Regex(_prefix))]]
-							: [[[], new RegExp()]]
-			).find((p) => p[1]);
+			let _prefix = plugin.customPrefix ? plugin.customPrefix : defaultPrefix;
+			let match =
+				_prefix === defaultPrefix
+					? defaultPrefixMatch
+					: (
+							_prefix instanceof RegExp // RegExp Mode?
+								? [[_prefix.exec(m.text), _prefix]]
+								: Array.isArray(_prefix) // Array?
+									? _prefix.map((p) => {
+											let re =
+												p instanceof RegExp // RegExp in Array?
+													? p
+													: new RegExp(str2Regex(p));
+											return [re.exec(m.text), re];
+										})
+									: typeof _prefix === 'string' // String?
+										? [[new RegExp(str2Regex(_prefix)).exec(m.text), new RegExp(str2Regex(_prefix))]]
+										: [[[], new RegExp()]]
+						).find((p) => p[1]);
 			if (typeof plugin.before === 'function') {
 				if (
 					await plugin.before.call(this, m, {
@@ -109,7 +134,7 @@ export async function handler(chatUpdate) {
 						isBotAdmin,
 						isPrems,
 						chatUpdate,
-						__dirname: ___dirname,
+						__dirname: pluginsDir,
 						__filename,
 					})
 				)
@@ -219,7 +244,7 @@ export async function handler(chatUpdate) {
 					isBotAdmin,
 					isPrems,
 					chatUpdate,
-					__dirname: ___dirname,
+					__dirname: pluginsDir,
 					__filename,
 				};
 				try {
@@ -289,7 +314,8 @@ export async function handler(chatUpdate) {
 		}
 
 		try {
-			await (await import(`./lib/print.js`)).default(m, this);
+			// ⚡ Bolt: Replaced dynamic import() with static import to eliminate module resolution overhead on every message.
+			await print(m, this);
 		} catch (e) {
 			console.log(m, m.quoted, e);
 		}
