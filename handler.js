@@ -5,6 +5,10 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import { unwatchFile, watchFile } from 'fs';
 import chalk from 'chalk';
+import print from './lib/print.js';
+
+const ___dirname = path.join(path.dirname(fileURLToPath(import.meta.url)), './plugins');
+const str2Regex = (str) => str.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&');
 
 /**
  * Handle messages upsert
@@ -50,7 +54,23 @@ export async function handler(chatUpdate) {
 		const isAdmin = isRAdmin || user?.admin == 'admin' || false; // Is User Admin?
 		const isBotAdmin = bot?.admin || false; // Are you Admin?
 
-		const ___dirname = path.join(path.dirname(fileURLToPath(import.meta.url)), './plugins');
+		// ⚡ Bolt: Pre-calculate the default prefix match once per message to optimize the plugin loop.
+		// We ensure the match is always an array [matchResult, RegExp] to maintain compatibility with plugins.
+		const defaultPrefix = conn.prefix ? conn.prefix : global.prefix;
+		const defaultPrefixMatches = (
+			defaultPrefix instanceof RegExp // RegExp Mode?
+				? [[defaultPrefix.exec(m.text), defaultPrefix]]
+				: Array.isArray(defaultPrefix) // Array?
+					? defaultPrefix.map((p) => {
+							const re = p instanceof RegExp ? p : new RegExp(str2Regex(p));
+							return [re.exec(m.text), re];
+						})
+					: typeof defaultPrefix === 'string' // String?
+						? [[new RegExp(str2Regex(defaultPrefix)).exec(m.text), new RegExp(str2Regex(defaultPrefix))]]
+						: [[null, new RegExp()]]
+		);
+		const defaultPrefixMatch = defaultPrefixMatches.find((p) => p[0]) || defaultPrefixMatches[0];
+
 		for (let name in global.plugins) {
 			let plugin = global.plugins[name];
 			if (!plugin) continue;
@@ -76,23 +96,23 @@ export async function handler(chatUpdate) {
 				// global.dfail('restrict', m, this)
 				continue;
 			}
-			const str2Regex = (str) => str.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&');
-			let _prefix = plugin.customPrefix ? plugin.customPrefix : conn.prefix ? conn.prefix : global.prefix;
-			let match = (
-				_prefix instanceof RegExp // RegExp Mode?
-					? [[_prefix.exec(m.text), _prefix]]
-					: Array.isArray(_prefix) // Array?
-						? _prefix.map((p) => {
-								let re =
-									p instanceof RegExp // RegExp in Array?
-										? p
-										: new RegExp(str2Regex(p));
-								return [re.exec(m.text), re];
-							})
-						: typeof _prefix === 'string' // String?
-							? [[new RegExp(str2Regex(_prefix)).exec(m.text), new RegExp(str2Regex(_prefix))]]
-							: [[[], new RegExp()]]
-			).find((p) => p[1]);
+			let match = plugin.customPrefix
+				? (() => {
+						const customPrefixMatches = (
+							plugin.customPrefix instanceof RegExp // RegExp Mode?
+								? [[plugin.customPrefix.exec(m.text), plugin.customPrefix]]
+								: Array.isArray(plugin.customPrefix) // Array?
+									? plugin.customPrefix.map((p) => {
+											let re = p instanceof RegExp ? p : new RegExp(str2Regex(p));
+											return [re.exec(m.text), re];
+										})
+									: typeof plugin.customPrefix === 'string' // String?
+										? [[new RegExp(str2Regex(plugin.customPrefix)).exec(m.text), new RegExp(str2Regex(plugin.customPrefix))]]
+										: [[null, new RegExp()]]
+						);
+						return customPrefixMatches.find((p) => p[0]) || customPrefixMatches[0];
+					})()
+				: defaultPrefixMatch;
 			if (typeof plugin.before === 'function') {
 				if (
 					await plugin.before.call(this, m, {
@@ -289,7 +309,7 @@ export async function handler(chatUpdate) {
 		}
 
 		try {
-			await (await import(`./lib/print.js`)).default(m, this);
+			await print(m, this);
 		} catch (e) {
 			console.log(m, m.quoted, e);
 		}
